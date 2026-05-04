@@ -82,29 +82,23 @@ export function ShopsView() {
     setIsExtendModalOpen(true)
   }
 
-  const handleExtendLicense = async () => {
-    if (!selectedShopId || !newExpiryDate) return
-    
-    // Convert back to ISO string for Supabase timestamp with time zone
-    const isoDate = new Date(newExpiryDate).toISOString()
-
-    if (selectedLicenseId) {
+  const updateLicenseDate = async (shopId: string, licenseId: string | null, isoDate: string) => {
+    if (licenseId) {
       const { error } = await supabase
         .from('licenses')
         .update({ expiry_date: isoDate })
-        .eq('id', selectedLicenseId)
+        .eq('id', licenseId)
 
       if (!error) {
-        setShops(shops.map(shop => {
-          if (shop.id === selectedShopId) {
+        setShops(prevShops => prevShops.map(shop => {
+          if (shop.id === shopId) {
             const updatedLicenses = shop.licenses?.length 
-              ? shop.licenses.map(l => l.id === selectedLicenseId ? { ...l, expiry_date: isoDate } : l)
-              : [{ id: selectedLicenseId, expiry_date: isoDate }]
+              ? shop.licenses.map(l => l.id === licenseId ? { ...l, expiry_date: isoDate } : l)
+              : [{ id: licenseId, expiry_date: isoDate }]
             return { ...shop, licenses: updatedLicenses }
           }
           return shop
         }))
-        setIsExtendModalOpen(false)
       } else {
         console.error("Error extending license:", error)
       }
@@ -112,21 +106,41 @@ export function ShopsView() {
       // If no license exists, create one
       const { data, error } = await supabase
         .from('licenses')
-        .insert([{ shop_id: selectedShopId, expiry_date: isoDate, status: 'active' }])
+        .insert([{ shop_id: shopId, expiry_date: isoDate, status: 'active' }])
         .select()
         
       if (!error && data) {
-        setShops(shops.map(shop => {
-          if (shop.id === selectedShopId) {
+        setShops(prevShops => prevShops.map(shop => {
+          if (shop.id === shopId) {
             return { ...shop, licenses: [data[0]] }
           }
           return shop
         }))
-        setIsExtendModalOpen(false)
       } else {
         console.error("Error creating license:", error)
       }
     }
+  }
+
+  const handleExtendLicense = async () => {
+    if (!selectedShopId || !newExpiryDate) return
+    const isoDate = new Date(newExpiryDate).toISOString()
+    await updateLicenseDate(selectedShopId, selectedLicenseId, isoDate)
+    setIsExtendModalOpen(false)
+  }
+
+  const handleAdd30Days = async (shop: Shop) => {
+    const activeLicense = shop.licenses?.[0]
+    let baseDate = new Date()
+    if (activeLicense?.expiry_date) {
+      const expiry = new Date(activeLicense.expiry_date)
+      // Only extend from existing expiry date if it hasn't expired yet
+      if (expiry > baseDate) {
+        baseDate = expiry
+      }
+    }
+    baseDate.setDate(baseDate.getDate() + 30)
+    await updateLicenseDate(shop.id, activeLicense?.id || null, baseDate.toISOString())
   }
 
   return (
@@ -205,6 +219,15 @@ export function ShopsView() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="h-8 gap-1 text-xs px-2"
+                            title="Add 30 Days Automatically"
+                            onClick={() => handleAdd30Days(shop)}
+                          >
+                            +30d
+                          </Button>
                           <Button 
                             variant="outline" 
                             size="sm" 
