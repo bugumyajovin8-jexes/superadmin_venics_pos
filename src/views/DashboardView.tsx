@@ -8,7 +8,8 @@ import { alertsData } from "@/src/data/mockData"
 
 export function DashboardView() {
   const [metrics, setMetrics] = useState({
-    activeMerchants: 0,
+    totalShops: 0,
+    activeShopsToday: 0,
     totalRevenue: 0,
     dau: 0,
   })
@@ -17,11 +18,22 @@ export function DashboardView() {
   useEffect(() => {
     async function fetchDashboardData() {
       try {
-        // Active Merchants
-        const { count: activeMerchants } = await supabase
+        // Total Shops
+        const { count: totalShops } = await supabase
           .from('shops')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'active')
+
+        // Active Shops Today
+        const startOfDay = new Date()
+        startOfDay.setHours(0, 0, 0, 0)
+        
+        const { data: activeSalesConfig } = await supabase
+          .from('sales')
+          .select('shop_id')
+          .gte('created_at', startOfDay.toISOString())
+
+        const uniqueActiveShops = new Set(activeSalesConfig?.map(s => s.shop_id).filter(Boolean))
+        const activeShopsToday = uniqueActiveShops.size
 
         // Revenue (Sum of sales total_amount for current month)
         const startOfMonth = new Date()
@@ -37,9 +49,6 @@ export function DashboardView() {
         const totalRevenue = sales?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0
 
         // DAU (Users active today via sales)
-        const startOfDay = new Date()
-        startOfDay.setHours(0, 0, 0, 0)
-        
         const { data: activeSales } = await supabase
           .from('sales')
           .select('user_id')
@@ -49,7 +58,8 @@ export function DashboardView() {
         const dau = uniqueUsers.size
 
         setMetrics({
-          activeMerchants: activeMerchants || 0,
+          totalShops: totalShops || 0,
+          activeShopsToday: activeShopsToday,
           totalRevenue,
           dau: dau
         })
@@ -113,17 +123,17 @@ export function DashboardView() {
         />
         <MetricCard
           title="Active Merchants"
-          value={metrics.activeMerchants.toLocaleString()}
+          value={metrics.totalShops.toLocaleString()}
+          icon={<Users className="h-4 w-4" />}
+        />
+        <MetricCard
+          title="Active Shops (Today)"
+          value={metrics.activeShopsToday.toLocaleString()}
           icon={<Store className="h-4 w-4" />}
         />
         <MetricCard
           title="Daily Active Users"
           value={metrics.dau.toLocaleString()}
-          icon={<Users className="h-4 w-4" />}
-        />
-        <MetricCard
-          title="System Uptime"
-          value="99.99%"
           icon={<Activity className="h-4 w-4" />}
         />
       </div>

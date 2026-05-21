@@ -1,4 +1,4 @@
-import { LayoutDashboard, Store, BarChart3, Activity, Settings, LogOut, Users } from "lucide-react"
+import { LayoutDashboard, Store, BarChart3, Activity, Settings, LogOut, Users, Megaphone, Package } from "lucide-react"
 import { cn } from "@/src/lib/utils"
 import { supabase } from "@/src/lib/supabase"
 
@@ -12,6 +12,9 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
     { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
     { id: 'shops', label: 'Shop Management', icon: Store },
     { id: 'directory', label: 'Shop Directory', icon: Users },
+    { id: 'products', label: 'Shop Products', icon: Package },
+    { id: 'active', label: 'Active Shops', icon: Activity },
+    { id: 'broadcast', label: 'Broadcast', icon: Megaphone },
     { id: 'analytics', label: 'Analytics & Metrics', icon: BarChart3 },
     { id: 'health', label: 'System Health', icon: Activity },
   ]

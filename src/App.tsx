@@ -11,9 +11,12 @@ import { Header } from "@/src/components/layout/Header"
 import { DashboardView } from "@/src/views/DashboardView"
 import { ShopsView } from "@/src/views/ShopsView"
 import { ShopDirectoryView } from "@/src/views/ShopDirectoryView"
+import { ActiveShopsView } from "@/src/views/ActiveShopsView"
 import { AnalyticsView } from "@/src/views/AnalyticsView"
+import { BroadcastView } from "@/src/views/BroadcastView"
 import { SystemHealthView } from "@/src/views/SystemHealthView"
 import { LoginView } from "@/src/views/LoginView"
+import { ShopProductsView } from "@/src/views/ShopProductsView"
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
@@ -92,6 +95,12 @@ export default function App() {
         return <ShopsView />
       case "directory":
         return <ShopDirectoryView />
+      case "products":
+        return <ShopProductsView />
+      case "active":
+        return <ActiveShopsView />
+      case "broadcast":
+        return <BroadcastView />
       case "analytics":
         return <AnalyticsView />
       case "health":
@@ -106,6 +115,9 @@ export default function App() {
       case "dashboard": return "Overview"
       case "shops": return "Shop Management"
       case "directory": return "Shop Directory"
+      case "products": return "Shop Products"
+      case "active": return "Active Shops Today"
+      case "broadcast": return "Broadcast Messages"
       case "analytics": return "Analytics & Metrics"
       case "health": return "System Health"
       default: return "Dashboard"
