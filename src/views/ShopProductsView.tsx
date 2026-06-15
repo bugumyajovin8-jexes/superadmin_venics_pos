@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src
 import { Button } from "@/src/components/ui/Button"
 import { Input } from "@/src/components/ui/Input"
 import { Badge } from "@/src/components/ui/Badge"
-import { Store, Loader2, Download, Search, ChevronRight, ArrowLeft, Package, Plus, Save, X, Edit2 } from "lucide-react"
+import { Store, Loader2, Download, Search, ChevronRight, ArrowLeft, Package, Plus, Save, X, Edit2, AlertCircle, FileUp } from "lucide-react"
+import { SmartExcelImportModal } from "./SmartExcelImportModal"
 import * as XLSX from "xlsx"
 
 interface Shop {
@@ -39,6 +40,8 @@ export function ShopProductsView() {
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [newProductForm, setNewProductForm] = useState<Partial<Product>>({ unit: 'pcs', buy_price: 0, sell_price: 0, stock: 0, name: '' })
   const [isSavingNewProduct, setIsSavingNewProduct] = useState(false)
+
+  const [isSmartImportModalOpen, setIsSmartImportModalOpen] = useState(false)
 
   useEffect(() => {
     fetchShops()
@@ -226,6 +229,14 @@ export function ShopProductsView() {
               </Button>
             )}
             <Button
+              onClick={() => setIsSmartImportModalOpen(true)}
+              disabled={loadingProducts}
+              className="gap-2 bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              <FileUp className="h-4 w-4" />
+              Smart Import
+            </Button>
+            <Button
               onClick={handleExportExcel}
               disabled={products.length === 0 || loadingProducts}
               className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -238,8 +249,33 @@ export function ShopProductsView() {
 
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle>Product Inventory</CardTitle>
-            <CardDescription>{products.length} products found.</CardDescription>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <CardTitle>Product Inventory</CardTitle>
+                <CardDescription>{products.length} products found.</CardDescription>
+              </div>
+              {products.length > 0 && (() => {
+                const zeroPriceCount = products.filter(p => Number(p.buy_price) === 0 && Number(p.sell_price) === 0).length;
+                const zeroStockCount = products.filter(p => Number(p.stock) === 0).length;
+                
+                return (
+                  <div className="flex flex-col gap-2 items-end">
+                    {zeroPriceCount > 0 && (
+                      <Badge variant="destructive" className="flex items-center gap-1.5 px-3 py-1 bg-red-100 text-red-700 hover:bg-red-200 border-red-200">
+                        <AlertCircle className="h-4 w-4" />
+                        {zeroPriceCount} product{zeroPriceCount !== 1 ? 's' : ''} with zero buying & selling price
+                      </Badge>
+                    )}
+                    {zeroStockCount > 0 && (
+                      <Badge variant="destructive" className="flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-700 hover:bg-amber-200 border-amber-200">
+                        <AlertCircle className="h-4 w-4" />
+                        {zeroStockCount} product{zeroStockCount !== 1 ? 's' : ''} with zero stock
+                      </Badge>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="rounded-md border border-slate-200 overflow-x-auto">
@@ -422,6 +458,14 @@ export function ShopProductsView() {
             </div>
           </CardContent>
         </Card>
+        
+        <SmartExcelImportModal 
+          isOpen={isSmartImportModalOpen}
+          onClose={() => setIsSmartImportModalOpen(false)}
+          currentProducts={products}
+          shopId={selectedShop.id}
+          onProductsUpdated={() => fetchProducts(selectedShop.id)}
+        />
       </div>
     )
   }

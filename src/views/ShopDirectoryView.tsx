@@ -2,8 +2,10 @@ import { useState, useEffect } from "react"
 import { supabase } from "@/src/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/components/ui/Card"
 import { Badge } from "@/src/components/ui/Badge"
-import { Users, User, Briefcase, Store, Loader2, Search } from "lucide-react"
+import { Users, User, Briefcase, Store, Loader2, Search, MessageSquare, AlertCircle, Calendar } from "lucide-react"
 import { Input } from "@/src/components/ui/Input"
+import { Button } from "@/src/components/ui/Button"
+import { Modal } from "@/src/components/ui/Modal"
 
 interface UserProfile {
   id: string
@@ -20,10 +22,27 @@ interface ShopWithStaff {
   users: UserProfile[]
 }
 
+interface AssistantChat {
+  id: string
+  session_id: string
+  message_type: 'user' | 'assistant' | 'system'
+  content: string
+  is_unresolved: boolean
+  created_at: string
+  metadata: any
+}
+
 export function ShopDirectoryView() {
   const [shops, setShops] = useState<ShopWithStaff[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+
+  // AI Chats State
+  const [isChatsModalOpen, setIsChatsModalOpen] = useState(false)
+  const [selectedShopForChats, setSelectedShopForChats] = useState<ShopWithStaff | null>(null)
+  const [shopChats, setShopChats] = useState<AssistantChat[]>([])
+  const [loadingChats, setLoadingChats] = useState(false)
+  const [chatError, setChatError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchShopDirectory()
@@ -59,6 +78,30 @@ export function ShopDirectoryView() {
       console.error("Error fetching shop directory:", err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleOpenChats = async (shop: ShopWithStaff) => {
+    setSelectedShopForChats(shop)
+    setIsChatsModalOpen(true)
+    setLoadingChats(true)
+    setShopChats([])
+    setChatError(null)
+
+    try {
+      const { data, error } = await supabase
+        .from('assistant_chats')
+        .select('*')
+        .eq('shop_id', shop.id)
+        .order('created_at', { ascending: true })
+      
+      if (error) throw error
+      setShopChats(data || [])
+    } catch (err: any) {
+      console.error("Error fetching AI chats:", err)
+      setChatError(err.message || "Failed to load chats")
+    } finally {
+      setLoadingChats(false)
     }
   }
 
@@ -192,6 +235,17 @@ export function ShopDirectoryView() {
                     </div>
                   </div>
                 )}
+
+                <div className="pt-4 border-t border-slate-100 flex justify-end">
+                   <Button 
+                      variant="outline" 
+                      className="w-full sm:w-auto gap-2 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 border-indigo-200"
+                      onClick={() => handleOpenChats(shop)}
+                    >
+                      <MessageSquare className="h-4 w-4" />
+                      View Mshauri AI Chats
+                   </Button>
+                </div>
               </CardContent>
             </Card>
           )
@@ -205,6 +259,75 @@ export function ShopDirectoryView() {
           <p className="text-slate-500">Try adjusting your search terms.</p>
         </div>
       )}
+
+      {/* AI Chat History Modal */}
+      <Modal 
+        isOpen={isChatsModalOpen} 
+        onClose={() => setIsChatsModalOpen(false)} 
+        title={`AI Chat History: ${selectedShopForChats?.name}`}
+        className="max-w-2xl w-full h-[80vh] flex flex-col"
+      >
+        <div className="flex-1 flex flex-col h-full bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+           {loadingChats ? (
+             <div className="flex-1 flex items-center justify-center text-slate-500 gap-2">
+               <Loader2 className="h-6 w-6 animate-spin" />
+               Fetching chat history...
+             </div>
+           ) : chatError ? (
+             <div className="flex-1 flex flex-col items-center justify-center text-red-500 p-8 text-center gap-3">
+               <AlertCircle className="h-12 w-12 text-red-200" />
+               <div>Failed to load: {chatError}</div>
+             </div>
+           ) : shopChats.length === 0 ? (
+             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-8 text-center gap-3">
+               <MessageSquare className="h-12 w-12 text-slate-300" />
+               <div>No AI chat history found for this shop.</div>
+             </div>
+           ) : (
+             <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {shopChats.map((chat) => {
+                  const isUser = chat.message_type === 'user';
+                  const isSystem = chat.message_type === 'system';
+                  
+                  if (isSystem) {
+                    return (
+                      <div key={chat.id} className="flex justify-center my-4">
+                        <span className="bg-slate-200 text-slate-600 text-[10px] font-mono px-3 py-1 rounded-full flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {new Date(chat.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div key={chat.id} className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} gap-1 max-w-full`}>
+                       <div className="flex items-end gap-2 max-w-[85%]">
+                          {!isUser && (
+                            <div className="h-8 w-8 min-w-[2rem] rounded-full bg-indigo-600 flex items-center justify-center shrink-0">
+                               <MessageSquare className="h-4 w-4 text-white" />
+                            </div>
+                          )}
+                          <div className={`px-4 py-2.5 rounded-2xl text-sm ${isUser ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none shadow-sm flex flex-col'}`}>
+                             {chat.content}
+                             {chat.is_unresolved && !isUser && (
+                                <div className="mt-2 pt-2 border-t border-slate-100 text-red-500 text-xs flex items-center gap-1 font-medium pb-0.5">
+                                   <AlertCircle className="h-3 w-3" /> Flagged as Unresolved
+                                </div>
+                             )}
+                          </div>
+                       </div>
+                       <div className={`text-[10px] text-slate-400 px-1 ${isUser ? 'pr-2' : 'pl-11'}`}>
+                         {new Date(chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                         {chat.metadata?.intent && ` • Intent: ${chat.metadata.intent}`}
+                       </div>
+                    </div>
+                  )
+                })}
+             </div>
+           )}
+        </div>
+      </Modal>
     </div>
   )
 }
