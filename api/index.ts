@@ -150,4 +150,46 @@ app.put("/api/products/:productId", async (req, res) => {
   }
 });
 
+// Get shop records (sales and sale items)
+app.get("/api/shops/:shopId/records", async (req, res) => {
+  try {
+    const { shopId } = req.params;
+    const { startDate, endDate } = req.query;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: "startDate and endDate are required" });
+    }
+    
+    const { data, error } = await supabaseAdmin
+      .from('sales')
+      .select(`
+        id, 
+        created_at, 
+        status, 
+        sale_items (
+          id, 
+          product_name, 
+          qty, 
+          buy_price, 
+          sell_price, 
+          updated_at,
+          created_at,
+          products (
+            sell_price
+          )
+        )
+      `)
+      .eq('shop_id', shopId)
+      .gte('created_at', startDate as string)
+      .lte('created_at', endDate as string);
+      
+    if (error) throw error;
+    
+    res.json(data);
+  } catch (error: any) {
+    console.error("Error fetching shop records:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default app;
