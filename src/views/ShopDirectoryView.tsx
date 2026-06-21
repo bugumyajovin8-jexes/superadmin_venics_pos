@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { supabase } from "@/src/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/components/ui/Card"
 import { Badge } from "@/src/components/ui/Badge"
-import { Users, User, Briefcase, Store, Loader2, Search, MessageSquare, AlertCircle, Calendar } from "lucide-react"
+import { Users, User, Briefcase, Store, Loader2, Search, MessageSquare, AlertCircle, Calendar, Activity } from "lucide-react"
 import { Input } from "@/src/components/ui/Input"
 import { Button } from "@/src/components/ui/Button"
 import { Modal } from "@/src/components/ui/Modal"
@@ -43,6 +43,13 @@ export function ShopDirectoryView() {
   const [shopChats, setShopChats] = useState<AssistantChat[]>([])
   const [loadingChats, setLoadingChats] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
+
+  // Feature Usage State
+  const [isUsageModalOpen, setIsUsageModalOpen] = useState(false)
+  const [selectedShopForUsage, setSelectedShopForUsage] = useState<ShopWithStaff | null>(null)
+  const [shopUsage, setShopUsage] = useState<{name: string, count: number, lastUsed: string}[]>([])
+  const [loadingUsage, setLoadingUsage] = useState(false)
+  const [usageError, setUsageError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchShopDirectory()
@@ -102,6 +109,70 @@ export function ShopDirectoryView() {
       setChatError(err.message || "Failed to load chats")
     } finally {
       setLoadingChats(false)
+    }
+  }
+
+  const handleOpenUsage = async (shop: ShopWithStaff) => {
+    setSelectedShopForUsage(shop)
+    setIsUsageModalOpen(true)
+    setLoadingUsage(true)
+    setShopUsage([])
+    setUsageError(null)
+
+    try {
+      const { data, error } = await supabase
+        .from('saas_telemetry')
+        .select('feature_key, created_at')
+        .eq('shop_id', shop.id)
+      
+      if (error) throw error
+      
+      const TELEMETRY_LABELS: Record<string, string> = {
+        pos_checkout: "Sales",
+        mshauri_ai_advisor: "Chatbot",
+        debt_payments_clearance: "Debts",
+        expenses_tracker: "Expenses",
+        bulk_product_import: "Excel",
+        saas_feature_flag_toggle: "Features",
+        product_expiry_tracker: "Expiry",
+        camera_product_scan: "Camera AI",
+        instant_product_message_share: "Quick product entrance",
+        backdated_sale: "Backdate Sales",
+        backdated_expense: "Backdate expenses",
+        mabadiliko_ya_bidhaa: "Stock changes",
+        employee_reports_view: "Employee reports",
+        add_staff: "Add Employee",
+        stock_valuation_checked: "Total Business Value",
+        refund_sale: "Refund Sale",
+        whatsapp_debt_reminder: "Whatsapp Debt"
+      }
+
+      const usageMap: Record<string, {count: number, lastUsed: string}> = {}
+
+      ;(data || []).forEach(record => {
+        const rawKey = record.feature_key
+        const key = TELEMETRY_LABELS[rawKey] || rawKey
+        if (!usageMap[key]) {
+          usageMap[key] = { count: 0, lastUsed: record.created_at }
+        }
+        usageMap[key].count += 1
+        if (new Date(record.created_at) > new Date(usageMap[key].lastUsed)) {
+          usageMap[key].lastUsed = record.created_at
+        }
+      })
+
+      const usageArray = Object.keys(usageMap).map(key => ({
+        name: key,
+        count: usageMap[key].count,
+        lastUsed: usageMap[key].lastUsed
+      })).sort((a, b) => b.count - a.count)
+
+      setShopUsage(usageArray)
+    } catch (err: any) {
+      console.error("Error fetching feature usage:", err)
+      setUsageError(err.message || "Failed to load feature usage")
+    } finally {
+      setLoadingUsage(false)
     }
   }
 
@@ -236,7 +307,15 @@ export function ShopDirectoryView() {
                   </div>
                 )}
 
-                <div className="pt-4 border-t border-slate-100 flex justify-end">
+                <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row gap-2 justify-end">
+                   <Button 
+                      variant="outline" 
+                      className="w-full sm:w-auto gap-2 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 border-indigo-200"
+                      onClick={() => handleOpenUsage(shop)}
+                    >
+                      <Activity className="h-4 w-4" />
+                      View Feature Usage
+                   </Button>
                    <Button 
                       variant="outline" 
                       className="w-full sm:w-auto gap-2 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 border-indigo-200"
@@ -324,6 +403,56 @@ export function ShopDirectoryView() {
                     </div>
                   )
                 })}
+             </div>
+           )}
+        </div>
+      </Modal>
+
+      {/* Feature Usage Modal */}
+      <Modal
+        isOpen={isUsageModalOpen}
+        onClose={() => setIsUsageModalOpen(false)}
+        title={`Feature Usage: ${selectedShopForUsage?.name}`}
+        description="Tracking feature adoption telemetry data for this shop."
+        className="sm:max-w-[600px] h-[80vh] flex flex-col"
+      >
+        <div className="flex-1 flex flex-col min-h-0 bg-slate-50/50 -mx-6 -mb-6 mt-2 relative">
+           {loadingUsage ? (
+             <div className="flex-1 flex flex-col items-center justify-center text-slate-500 gap-2 p-8">
+               <Loader2 className="h-6 w-6 animate-spin" />
+               <span>Fetching telemetry data...</span>
+             </div>
+           ) : usageError ? (
+             <div className="flex-1 flex flex-col items-center justify-center text-red-500 p-8 text-center gap-3">
+               <AlertCircle className="h-12 w-12 text-red-200" />
+               <div>Failed to load: {usageError}</div>
+             </div>
+           ) : shopUsage.length === 0 ? (
+             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-8 text-center gap-3">
+               <Activity className="h-12 w-12 text-slate-300" />
+               <div>No telemetry tracking data found for this shop.</div>
+             </div>
+           ) : (
+             <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
+                {shopUsage.map((usage, index) => (
+                  <div key={index} className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 shrink-0 bg-indigo-50 flex items-center justify-center rounded-lg text-indigo-600 font-bold">
+                        {index + 1}
+                      </div>
+                      <div>
+                        <div className="font-semibold text-slate-900">{usage.name}</div>
+                        <div className="text-xs text-slate-500">
+                          Last used: {new Date(usage.lastUsed).toLocaleDateString()} at {new Date(usage.lastUsed).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit'})}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xl font-bold tracking-tight text-indigo-700">{usage.count}</div>
+                      <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Times Used</div>
+                    </div>
+                  </div>
+                ))}
              </div>
            )}
         </div>
