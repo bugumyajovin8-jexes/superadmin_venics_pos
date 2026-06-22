@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { supabase } from "@/src/lib/supabase"
+import { supabase, fetchAllRecords } from "@/src/lib/supabase"
 import { MetricCard } from "@/src/components/ui/MetricCard"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/components/ui/Card"
 import { DollarSign, Users, Store, Activity, AlertTriangle, Info, XCircle } from "lucide-react"
@@ -27,11 +27,12 @@ export function DashboardView() {
         const startOfDay = new Date()
         startOfDay.setHours(0, 0, 0, 0)
         
-        const { data: activeSalesConfig } = await supabase
+        const activeSalesQuery = supabase
           .from('sales')
           .select('shop_id')
           .gte('created_at', startOfDay.toISOString())
 
+        const activeSalesConfig = await fetchAllRecords(activeSalesQuery)
         const uniqueActiveShops = new Set(activeSalesConfig?.map(s => s.shop_id).filter(Boolean))
         const activeShopsToday = uniqueActiveShops.size
 
@@ -40,20 +41,22 @@ export function DashboardView() {
         startOfMonth.setDate(1)
         startOfMonth.setHours(0, 0, 0, 0)
         
-        const { data: sales } = await supabase
+        const revQuery = supabase
           .from('sales')
           .select('total_amount')
           .gte('created_at', startOfMonth.toISOString())
           .eq('status', 'completed')
 
+        const sales = await fetchAllRecords(revQuery)
         const totalRevenue = sales?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0
 
         // DAU (Users active today via sales)
-        const { data: activeSales } = await supabase
+        const dauQuery = supabase
           .from('sales')
           .select('user_id')
           .gte('created_at', startOfDay.toISOString())
 
+        const activeSales = await fetchAllRecords(dauQuery)
         const uniqueUsers = new Set(activeSales?.map(s => s.user_id).filter(Boolean))
         const dau = uniqueUsers.size
 
@@ -70,11 +73,13 @@ export function DashboardView() {
         sixMonthsAgo.setDate(1)
         sixMonthsAgo.setHours(0, 0, 0, 0)
 
-        const { data: historicalSales } = await supabase
+        const historicalSalesQuery = supabase
           .from('sales')
           .select('total_amount, created_at')
           .gte('created_at', sixMonthsAgo.toISOString())
           .eq('status', 'completed')
+
+        const historicalSales = await fetchAllRecords(historicalSalesQuery)
 
         if (historicalSales) {
           const monthlyData: Record<string, number> = {}

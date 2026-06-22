@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { supabase } from "@/src/lib/supabase"
+import { supabase, fetchAllRecords } from "@/src/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/components/ui/Card"
 import { Button } from "@/src/components/ui/Button"
 import { Input } from "@/src/components/ui/Input"
@@ -54,15 +54,19 @@ export function BroadcastView() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [shopsRes, usersRes, historyRes] = await Promise.all([
-        supabase.from('shops').select('id, name').order('name'),
-        supabase.from('users').select('id, name, email, role, shop_id').order('name'),
-        supabase.from('broadcast_messages').select('*').order('created_at', { ascending: false }).limit(10)
+      const shopsQuery = supabase.from('shops').select('id, name').order('name')
+      const usersQuery = supabase.from('users').select('id, name, email, role, shop_id').order('name')
+      const historyQuery = supabase.from('broadcast_messages').select('*').order('created_at', { ascending: false }).limit(10)
+
+      const [shopsData, usersData, historyData] = await Promise.all([
+        fetchAllRecords(shopsQuery),
+        fetchAllRecords(usersQuery),
+        fetchAllRecords(historyQuery)
       ])
 
-      if (shopsRes.data) setShops(shopsRes.data)
-      if (usersRes.data) setUsers(usersRes.data)
-      if (historyRes.data) setHistory(historyRes.data)
+      if (shopsData) setShops(shopsData)
+      if (usersData) setUsers(usersData)
+      if (historyData) setHistory(historyData)
     } catch (error) {
       console.error("Error fetching broadcast data:", error)
     } finally {

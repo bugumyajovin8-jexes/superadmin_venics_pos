@@ -11,6 +11,22 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://placeholder.supaba
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-key';
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
+const fetchAllRecordsAsync = async (queryBuilder: any) => {
+  let allData: any[] = [];
+  let from = 0;
+  const limit = 999;
+  
+  while (true) {
+    const { data, error } = await queryBuilder.range(from, from + limit - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allData = [...allData, ...data];
+    if (data.length < limit) break;
+    from += limit;
+  }
+  return allData;
+};
+
 app.use(express.json());
 
 // Get products for a given shop
@@ -18,14 +34,14 @@ app.get("/api/shops/:shopId/products", async (req, res) => {
   try {
     const { shopId } = req.params;
     
-    const { data, error } = await supabaseAdmin
+    const query = supabaseAdmin
       .from('products')
       .select('id, name, buy_price, sell_price, stock, unit')
       .eq('shop_id', shopId)
       .eq('is_deleted', false)
       .order('name');
       
-    if (error) throw error;
+    const data = await fetchAllRecordsAsync(query);
     
     res.json(data);
   } catch (error: any) {
@@ -160,7 +176,7 @@ app.get("/api/shops/:shopId/records", async (req, res) => {
       return res.status(400).json({ error: "startDate and endDate are required" });
     }
     
-    const { data, error } = await supabaseAdmin
+    const query = supabaseAdmin
       .from('sales')
       .select(`
         id, 
@@ -183,7 +199,7 @@ app.get("/api/shops/:shopId/records", async (req, res) => {
       .gte('created_at', startDate as string)
       .lte('created_at', endDate as string);
       
-    if (error) throw error;
+    const data = await fetchAllRecordsAsync(query);
     
     res.json(data);
   } catch (error: any) {
@@ -210,9 +226,7 @@ app.get("/api/analytics/network", async (req, res) => {
       query = query.eq('shop_id', shopId);
     }
 
-    const { data, error } = await query;
-
-    if (error) throw error;
+    const data = await fetchAllRecordsAsync(query);
 
     const shopStats: Record<string, { rawBytes: number, estTotalBytes: number, reqCount: number, ingressBytes: number, egressBytes: number }> = {};
     const tableStats: Record<string, { bytes: number, rows: number, reqCount: number }> = {};
@@ -273,11 +287,13 @@ app.get("/api/analytics/network", async (req, res) => {
     const shopIds = Object.keys(shopStats).filter(id => id !== 'unknown');
     let shopNames: Record<string, string> = {};
     if (shopIds.length > 0) {
-      const { data: shops } = await supabaseAdmin
-        .from('shops')
-        .select('id, name')
-        .in('id', shopIds);
-      if (shops) {
+      for (let i = 0; i < shopIds.length; i += 999) {
+        const chunk = shopIds.slice(i, i + 999);
+        const query = supabaseAdmin
+          .from('shops')
+          .select('id, name')
+          .in('id', chunk);
+        const shops = await fetchAllRecordsAsync(query);
         shops.forEach(shop => {
           shopNames[shop.id] = shop.name;
         });

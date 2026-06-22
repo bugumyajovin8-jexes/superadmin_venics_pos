@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { supabase } from "@/src/lib/supabase"
+import { supabase, fetchAllRecords } from "@/src/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/components/ui/Card"
 import { MetricCard } from "@/src/components/ui/MetricCard"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area } from "recharts"
@@ -41,11 +41,13 @@ export function AnalyticsView() {
         const isoThirtyDaysAgo = thirtyDaysAgo.toISOString()
 
         // 1. Fetch Sales (legacy code)
-        const { data: sales } = await supabase
+        const salesQuery = supabase
           .from('sales')
           .select('shop_id, total_amount, created_at, shops(name)')
           .gte('created_at', isoThirtyDaysAgo)
           .eq('status', 'completed')
+
+        const sales = await fetchAllRecords(salesQuery)
 
         if (sales) {
           const shopTotals: Record<string, { name: string, sales: number }> = {}
@@ -72,12 +74,12 @@ export function AnalyticsView() {
         }
 
         // 2. Fetch SaaS Telemetry limit to last 30 days
-        const { data: telemetry, error: telemetryError } = await supabase
+        const telemetryQuery = supabase
           .from('saas_telemetry')
           .select('feature_key, created_at')
           .gte('created_at', isoThirtyDaysAgo)
 
-        if (telemetryError) throw telemetryError;
+        const telemetry = await fetchAllRecords(telemetryQuery)
 
         if (telemetry) {
           const usageCount: Record<string, number> = {}
@@ -133,13 +135,13 @@ export function AnalyticsView() {
         }
 
         // 3. Fetch AI Chats
-        const { data: chats, error: chatsError } = await supabase
+        const chatsQuery = supabase
           .from('assistant_chats')
           .select('message_type, content, is_unresolved, metadata, created_at')
           .in('message_type', ['user', 'assistant'])
           .gte('created_at', isoThirtyDaysAgo)
 
-        if (chatsError) throw chatsError;
+        const chats = await fetchAllRecords(chatsQuery)
 
         if (chats) {
           const questionCounts: Record<string, number> = {}
@@ -205,8 +207,7 @@ export function AnalyticsView() {
             query = query.gte('created_at', dateLimit.toISOString());
           }
           
-          const { data, error } = await query;
-          if (error) throw error;
+          const data = await fetchAllRecords(query);
           
           if (data) {
             const usageCount: Record<string, number> = {};

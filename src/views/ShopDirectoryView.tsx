@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { supabase } from "@/src/lib/supabase"
+import { supabase, fetchAllRecords } from "@/src/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/components/ui/Card"
 import { Badge } from "@/src/components/ui/Badge"
 import { Users, User, Briefcase, Store, Loader2, Search, MessageSquare, AlertCircle, Calendar, Activity } from "lucide-react"
@@ -59,20 +59,20 @@ export function ShopDirectoryView() {
     setLoading(true)
     try {
       // Fetch all shops
-      const { data: shopsData, error: shopsError } = await supabase
+      const shopsQuery = supabase
         .from('shops')
         .select('id, name, status')
         .order('name')
-
-      if (shopsError) throw shopsError
+      
+      const shopsData = await fetchAllRecords(shopsQuery)
 
       // Fetch all users who belong to a shop
-      const { data: usersData, error: usersError } = await supabase
+      const usersQuery = supabase
         .from('users')
         .select('id, name, email, role, phone, shop_id')
         .not('shop_id', 'is', null)
 
-      if (usersError) throw usersError
+      const usersData = await fetchAllRecords(usersQuery)
 
       // Map users to their respective shops
       const combinedData = (shopsData || []).map(shop => ({
@@ -96,13 +96,13 @@ export function ShopDirectoryView() {
     setChatError(null)
 
     try {
-      const { data, error } = await supabase
+      const query = supabase
         .from('assistant_chats')
         .select('*')
         .eq('shop_id', shop.id)
         .order('created_at', { ascending: true })
       
-      if (error) throw error
+      const data = await fetchAllRecords(query)
       setShopChats(data || [])
     } catch (err: any) {
       console.error("Error fetching AI chats:", err)
@@ -120,12 +120,12 @@ export function ShopDirectoryView() {
     setUsageError(null)
 
     try {
-      const { data, error } = await supabase
+      const query = supabase
         .from('saas_telemetry')
         .select('feature_key, created_at')
         .eq('shop_id', shop.id)
       
-      if (error) throw error
+      const data = await fetchAllRecords(query)
       
       const TELEMETRY_LABELS: Record<string, string> = {
         pos_checkout: "Sales",

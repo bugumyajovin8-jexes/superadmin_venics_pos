@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { supabase } from "@/src/lib/supabase"
+import { supabase, fetchAllRecords } from "@/src/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/components/ui/Card"
 import { Button } from "@/src/components/ui/Button"
 import { Input } from "@/src/components/ui/Input"
@@ -145,12 +145,12 @@ export function ShopProductsView() {
   const fetchShops = async () => {
     setLoadingShops(true)
     try {
-      const { data, error } = await supabase
+      const query = supabase
         .from('shops')
         .select('id, name, owner_name')
         .order('name')
         
-      if (error) throw error
+      const data = await fetchAllRecords(query)
       if (data) {
         setShops(data)
         setFilteredShops(data)

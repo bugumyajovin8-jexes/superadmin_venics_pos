@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { supabase } from "@/src/lib/supabase"
+import { supabase, fetchAllRecords } from "@/src/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/components/ui/Card"
 import { Badge } from "@/src/components/ui/Badge"
 import { Store, Loader2, Activity, DollarSign, ExternalLink } from "lucide-react"
@@ -27,13 +27,12 @@ export function ActiveShopsView() {
       const startOfDay = new Date()
       startOfDay.setHours(0, 0, 0, 0)
 
-      // Fetch today's sales
-      const { data: sales, error: salesError } = await supabase
+      const salesQuery = supabase
         .from('sales')
         .select('shop_id, total_amount, created_at, shops(id, name, owner_name)')
         .gte('created_at', startOfDay.toISOString())
 
-      if (salesError) throw salesError
+      const sales = await fetchAllRecords(salesQuery)
 
       if (sales) {
         // Aggregate sales data per shop
