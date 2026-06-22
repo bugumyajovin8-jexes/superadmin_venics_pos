@@ -192,4 +192,150 @@ app.get("/api/shops/:shopId/records", async (req, res) => {
   }
 });
 
+// Get network analytics from telemetry
+app.get("/api/analytics/network", async (req, res) => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const { shopId } = req.query;
+
+    let query = supabaseAdmin
+      .from('saas_telemetry')
+      .select('shop_id, details, created_at')
+      .eq('feature_key', 'network_usage')
+      .gte('created_at', thirtyDaysAgo.toISOString());
+
+    if (shopId) {
+      query = query.eq('shop_id', shopId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    const shopStats: Record<string, { rawBytes: number, estTotalBytes: number, reqCount: number, ingressBytes: number, egressBytes: number }> = {};
+    const tableStats: Record<string, { bytes: number, rows: number, reqCount: number }> = {};
+    const payloadStats: Record<string, { totalBytes: number, maxBytes: number, reqCount: number }> = {};
+    const dailyStats: Record<string, { bytes: number, requests: number, ingressBytes: number, egressBytes: number }> = {};
+
+    (data || []).forEach(record => {
+      const details = record.details || {};
+      const actualShopId = record.shop_id || 'unknown';
+      const bytes = Number(details.bytes) || 0;
+      const estTotalBytes = Number(details.estimated_total_bytes) || 0;
+      const direction = details.direction || 'unknown';
+      const tableKey = `${details.table_name || 'unknown'}_${direction}`;
+      const rowsCount = Number(details.rows_count) || 0;
+      
+      const isIngress = direction === 'push';
+      const isEgress = direction === 'pull';
+
+      // Daily Stats (For graph)
+      const dateStr = record.created_at ? record.created_at.split('T')[0] : 'unknown';
+      if (dateStr !== 'unknown') {
+        if (!dailyStats[dateStr]) {
+          dailyStats[dateStr] = { bytes: 0, requests: 0, ingressBytes: 0, egressBytes: 0 };
+        }
+        dailyStats[dateStr].bytes += estTotalBytes;
+        if (isIngress) dailyStats[dateStr].ingressBytes += estTotalBytes;
+        if (isEgress) dailyStats[dateStr].egressBytes += estTotalBytes;
+        dailyStats[dateStr].requests += 1;
+      }
+
+      // 1. Shop Egress/Ingress
+      if (!shopStats[actualShopId]) {
+        shopStats[actualShopId] = { rawBytes: 0, estTotalBytes: 0, reqCount: 0, ingressBytes: 0, egressBytes: 0 };
+      }
+      shopStats[actualShopId].rawBytes += bytes;
+      shopStats[actualShopId].estTotalBytes += estTotalBytes;
+      if (isIngress) shopStats[actualShopId].ingressBytes += estTotalBytes;
+      if (isEgress) shopStats[actualShopId].egressBytes += estTotalBytes;
+      shopStats[actualShopId].reqCount += 1;
+
+      // 2. Table Egress/Ingress Split
+      if (!tableStats[tableKey]) {
+        tableStats[tableKey] = { bytes: 0, rows: 0, reqCount: 0 };
+      }
+      tableStats[tableKey].bytes += bytes;
+      tableStats[tableKey].rows += rowsCount;
+      tableStats[tableKey].reqCount += 1;
+
+      // 3. Request Payloads 
+      if (!payloadStats[tableKey]) {
+        payloadStats[tableKey] = { totalBytes: 0, maxBytes: 0, reqCount: 0 };
+      }
+      payloadStats[tableKey].totalBytes += bytes;
+      payloadStats[tableKey].maxBytes = Math.max(payloadStats[tableKey].maxBytes, bytes);
+      payloadStats[tableKey].reqCount += 1;
+    });
+
+    const shopIds = Object.keys(shopStats).filter(id => id !== 'unknown');
+    let shopNames: Record<string, string> = {};
+    if (shopIds.length > 0) {
+      const { data: shops } = await supabaseAdmin
+        .from('shops')
+        .select('id, name')
+        .in('id', shopIds);
+      if (shops) {
+        shops.forEach(shop => {
+          shopNames[shop.id] = shop.name;
+        });
+      }
+    }
+
+    const shopUsage = Object.entries(shopStats).map(([shop_id, stats]) => ({
+      shop_id,
+      shop_name: shopNames[shop_id] || shop_id,
+      raw_gb_used: stats.rawBytes / (1024 * 1024 * 1024),
+      est_total_gb_used: stats.estTotalBytes / (1024 * 1024 * 1024),
+      raw_bytes: stats.rawBytes,
+      est_total_bytes: stats.estTotalBytes,
+      ingress_bytes: stats.ingressBytes,
+      egress_bytes: stats.egressBytes,
+      total_requests: stats.reqCount
+    })).sort((a, b) => b.est_total_gb_used - a.est_total_gb_used);
+
+    const tableUsage = Object.entries(tableStats).map(([key, stats]) => {
+      const [table_name, sync_direction] = key.split('_');
+      return {
+        table_name,
+        sync_direction,
+        total_bytes: stats.bytes,
+        total_rows_transferred: stats.rows,
+        event_count: stats.reqCount
+      };
+    }).sort((a, b) => b.total_bytes - a.total_bytes);
+
+    const payloadUsage = Object.entries(payloadStats).map(([key, stats]) => {
+      const [table_name, sync_direction] = key.split('_');
+      return {
+        table_name,
+        sync_direction,
+        avg_bytes_per_request: stats.reqCount > 0 ? stats.totalBytes / stats.reqCount : 0,
+        max_bytes_per_request: stats.maxBytes,
+        total_requests: stats.reqCount
+      };
+    }).sort((a, b) => b.avg_bytes_per_request - a.avg_bytes_per_request);
+
+    const dailyUsage = Object.entries(dailyStats).map(([date, stats]) => ({
+      date,
+      bytes: stats.bytes,
+      ingress_bytes: stats.ingressBytes,
+      egress_bytes: stats.egressBytes,
+      requests: stats.requests
+    })).sort((a, b) => a.date.localeCompare(b.date));
+
+    res.json({
+      shopUsage,
+      tableUsage,
+      payloadUsage,
+      dailyUsage
+    });
+  } catch (error: any) {
+    console.error("Error fetching network analytics:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default app;
