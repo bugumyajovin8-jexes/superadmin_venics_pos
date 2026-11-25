@@ -1,0 +1,15 @@
+# Installed packages and builds
+node_modules/
+dist/
+
+# Keys and settings: never in git (Supabase service key, Gemini, etc.)
+.env
+.env.*
+!.env.example
+
+# Vercel's local link to the project
+.vercel/
+
+# Logs
+*.log
+npm-debug.log*

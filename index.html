@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>V Smart</title>
+  </head>
+  <body>
+    <script>
+      // The saved theme before the first paint, so a dark theme never flashes white (src/lib/theme.ts).
+      (function () {
+        try {
+          var s = JSON.parse(localStorage.getItem('sa_theme') || 'null') || {};
+          var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var t = s.choice === 'dark' || s.choice === 'purple' ? s.choice : s.choice === 'system' && dark ? (s.night === 'dark' ? 'dark' : 'purple') : 'light';
+          var r = document.documentElement;
+          r.setAttribute('data-theme', t);
+          if (t !== 'light') { r.classList.add('sa-night'); r.style.colorScheme = 'dark'; }
+        } catch (e) {}
+      })();
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

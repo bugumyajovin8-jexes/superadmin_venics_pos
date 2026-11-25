@@ -1,0 +1,5 @@
+{
+  "name": "POS Superadmin Dashboard",
+  "description": "A high-end SaaS admin dashboard for managing POS merchants, viewing analytics, and monitoring system health.",
+  "requestFramePermissions": []
+}
